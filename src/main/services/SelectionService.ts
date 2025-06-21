@@ -14,6 +14,7 @@ import type {
 
 import type { ActionItem } from '../../renderer/src/types/selectionTypes'
 import { ConfigKeys, configManager } from './ConfigManager'
+import storeSyncService from './StoreSyncService'
 
 let SelectionHook: SelectionHookConstructor | null = null
 try {
@@ -39,7 +40,8 @@ type RelativeOrientation =
 
 enum TriggerMode {
   Selected = 'selected',
-  Ctrlkey = 'ctrlkey'
+  Ctrlkey = 'ctrlkey',
+  Shortcut = 'shortcut'
 }
 
 /** SelectionService is a singleton class that manages the selection hook and the toolbar window
@@ -283,7 +285,7 @@ export class SelectionService {
         this.processTriggerMode()
 
         this.started = true
-        this.logInfo('SelectionService Started')
+        this.logInfo('SelectionService Started', true)
         return true
       }
 
@@ -304,13 +306,20 @@ export class SelectionService {
     if (!this.selectionHook) return false
 
     this.selectionHook.stop()
-    this.selectionHook.cleanup()
+    this.selectionHook.cleanup() //already remove all listeners
+
+    //reset the listener states
+    this.isCtrlkeyListenerActive = false
+    this.isHideByMouseKeyListenerActive = false
+
     if (this.toolbarWindow) {
       this.toolbarWindow.close()
       this.toolbarWindow = null
     }
+    this.closePreloadedActionWindows()
+
     this.started = false
-    this.logInfo('SelectionService Stopped')
+    this.logInfo('SelectionService Stopped', true)
     return true
   }
 
@@ -326,7 +335,22 @@ export class SelectionService {
     this.selectionHook = null
     this.initStatus = false
     SelectionService.instance = null
-    this.logInfo('SelectionService Quitted')
+    this.logInfo('SelectionService Quitted', true)
+  }
+
+  /**
+   * Toggle the enabled state of the selection service
+   * Will sync the new enabled store to all renderer windows
+   */
+  public toggleEnabled(enabled: boolean | undefined = undefined) {
+    if (!this.selectionHook) return
+
+    const newEnabled = enabled === undefined ? !configManager.getSelectionAssistantEnabled() : enabled
+
+    configManager.setSelectionAssistantEnabled(newEnabled)
+
+    //sync the new enabled state to all renderer windows
+    storeSyncService.syncToRenderer('selectionStore/setSelectionEnabled', newEnabled)
   }
 
   /**
@@ -373,6 +397,9 @@ export class SelectionService {
 
     // Clean up when closed
     this.toolbarWindow.on('closed', () => {
+      if (!this.toolbarWindow?.isDestroyed()) {
+        this.toolbarWindow?.destroy()
+      }
       this.toolbarWindow = null
     })
 
@@ -429,8 +456,18 @@ export class SelectionService {
       x: posX,
       y: posY
     })
+
+    //set the window to always on top (highest level)
+    //should set every time the window is shown
+    this.toolbarWindow!.setAlwaysOnTop(true, 'screen-saver')
     this.toolbarWindow!.show()
-    this.toolbarWindow!.setOpacity(1)
+
+    /**
+     * In Windows 10, setOpacity(1) will make the window completely transparent
+     * It's a strange behavior, so we don't use it for compatibility
+     */
+    // this.toolbarWindow!.setOpacity(1)
+
     this.startHideByMouseKeyListener()
   }
 
@@ -440,7 +477,7 @@ export class SelectionService {
   public hideToolbar(): void {
     if (!this.isToolbarAlive()) return
 
-    this.toolbarWindow!.setOpacity(0)
+    // this.toolbarWindow!.setOpacity(0)
     this.toolbarWindow!.hide()
 
     this.stopHideByMouseKeyListener()
@@ -556,6 +593,21 @@ export class SelectionService {
 
   private isSameLineWithRectPoint(startTop: Point, startBottom: Point, endTop: Point, endBottom: Point): boolean {
     return startTop.y === endTop.y && startBottom.y === endBottom.y
+  }
+
+  /**
+   * Get the user selected text and process it (trigger by shortcut)
+   *
+   * it's a public method used by shortcut service
+   */
+  public processSelectTextByShortcut(): void {
+    if (!this.selectionHook || !this.started || this.triggerMode !== TriggerMode.Shortcut) return
+
+    const selectionData = this.selectionHook.getCurrentSelection()
+
+    if (selectionData) {
+      this.processTextSelection(selectionData)
+    }
   }
 
   /**
@@ -807,8 +859,8 @@ export class SelectionService {
     if (this.triggerMode === TriggerMode.Ctrlkey && this.isCtrlkey(data.vkCode)) {
       return
     }
-    //dont hide toolbar when shiftkey is pressed, because it's used for selection
-    if (this.isShiftkey(data.vkCode)) {
+    //dont hide toolbar when shiftkey or altkey is pressed, because it's used for selection
+    if (this.isShiftkey(data.vkCode) || this.isAltkey(data.vkCode)) {
       return
     }
 
@@ -836,6 +888,9 @@ export class SelectionService {
     //ctrlkey pressed
     if (this.lastCtrlkeyDownTime === 0) {
       this.lastCtrlkeyDownTime = Date.now()
+      //add the mouse-wheel&mouse-down listener, detect if user is zooming in/out or multi-selecting
+      this.selectionHook!.on('mouse-wheel', this.handleMouseWheelCtrlkeyMode)
+      this.selectionHook!.on('mouse-down', this.handleMouseDownCtrlkeyMode)
       return
     }
 
@@ -846,7 +901,6 @@ export class SelectionService {
     this.lastCtrlkeyDownTime = -1
 
     const selectionData = this.selectionHook!.getCurrentSelection()
-
     if (selectionData) {
       this.processTextSelection(selectionData)
     }
@@ -859,7 +913,28 @@ export class SelectionService {
    */
   private handleKeyUpCtrlkeyMode = (data: KeyboardEventData) => {
     if (!this.isCtrlkey(data.vkCode)) return
+    //remove the mouse-wheel&mouse-down listener
+    this.selectionHook!.off('mouse-wheel', this.handleMouseWheelCtrlkeyMode)
+    this.selectionHook!.off('mouse-down', this.handleMouseDownCtrlkeyMode)
     this.lastCtrlkeyDownTime = 0
+  }
+
+  /**
+   * Handle mouse wheel events in ctrlkey trigger mode
+   * ignore CtrlKey pressing when mouse wheel is used
+   * because user is zooming in/out
+   */
+  private handleMouseWheelCtrlkeyMode = () => {
+    this.lastCtrlkeyDownTime = -1
+  }
+
+  /**
+   * Handle mouse down events in ctrlkey trigger mode
+   * ignore CtrlKey pressing when mouse down is used
+   * because user is multi-selecting
+   */
+  private handleMouseDownCtrlkeyMode = () => {
+    this.lastCtrlkeyDownTime = -1
   }
 
   //check if the key is ctrl key
@@ -870,6 +945,11 @@ export class SelectionService {
   //check if the key is shift key
   private isShiftkey(vkCode: number) {
     return vkCode === 160 || vkCode === 161
+  }
+
+  //check if the key is alt key
+  private isAltkey(vkCode: number) {
+    return vkCode === 164 || vkCode === 165
   }
 
   /**
@@ -921,6 +1001,17 @@ export class SelectionService {
       }
     } catch (error) {
       this.logError('Failed to initialize preloaded windows:', error as Error)
+    }
+  }
+
+  /**
+   * Close all preloaded action windows
+   */
+  private closePreloadedActionWindows() {
+    for (const actionWindow of this.preloadedActionWindows) {
+      if (!actionWindow.isDestroyed()) {
+        actionWindow.destroy()
+      }
     }
   }
 
@@ -1072,29 +1163,44 @@ export class SelectionService {
    * Manages appropriate event listeners for each mode
    */
   private processTriggerMode() {
-    if (this.triggerMode === TriggerMode.Selected) {
-      if (this.isCtrlkeyListenerActive) {
-        this.selectionHook!.off('key-down', this.handleKeyDownCtrlkeyMode)
-        this.selectionHook!.off('key-up', this.handleKeyUpCtrlkeyMode)
+    switch (this.triggerMode) {
+      case TriggerMode.Selected:
+        if (this.isCtrlkeyListenerActive) {
+          this.selectionHook!.off('key-down', this.handleKeyDownCtrlkeyMode)
+          this.selectionHook!.off('key-up', this.handleKeyUpCtrlkeyMode)
 
-        this.isCtrlkeyListenerActive = false
-      }
+          this.isCtrlkeyListenerActive = false
+        }
 
-      this.selectionHook!.setSelectionPassiveMode(false)
-    } else if (this.triggerMode === TriggerMode.Ctrlkey) {
-      if (!this.isCtrlkeyListenerActive) {
-        this.selectionHook!.on('key-down', this.handleKeyDownCtrlkeyMode)
-        this.selectionHook!.on('key-up', this.handleKeyUpCtrlkeyMode)
+        this.selectionHook!.setSelectionPassiveMode(false)
+        break
+      case TriggerMode.Ctrlkey:
+        if (!this.isCtrlkeyListenerActive) {
+          this.selectionHook!.on('key-down', this.handleKeyDownCtrlkeyMode)
+          this.selectionHook!.on('key-up', this.handleKeyUpCtrlkeyMode)
 
-        this.isCtrlkeyListenerActive = true
-      }
+          this.isCtrlkeyListenerActive = true
+        }
 
-      this.selectionHook!.setSelectionPassiveMode(true)
+        this.selectionHook!.setSelectionPassiveMode(true)
+        break
+      case TriggerMode.Shortcut:
+        //remove the ctrlkey listener, don't need any key listener for shortcut mode
+        if (this.isCtrlkeyListenerActive) {
+          this.selectionHook!.off('key-down', this.handleKeyDownCtrlkeyMode)
+          this.selectionHook!.off('key-up', this.handleKeyUpCtrlkeyMode)
+
+          this.isCtrlkeyListenerActive = false
+        }
+
+        this.selectionHook!.setSelectionPassiveMode(true)
+        break
     }
   }
 
   public writeToClipboard(text: string): boolean {
-    return this.selectionHook?.writeToClipboard(text) ?? false
+    if (!this.selectionHook || !this.started) return false
+    return this.selectionHook.writeToClipboard(text)
   }
 
   /**
@@ -1168,8 +1274,10 @@ export class SelectionService {
     this.isIpcHandlerRegistered = true
   }
 
-  private logInfo(message: string) {
-    isDev && Logger.info('[SelectionService] Info: ', message)
+  private logInfo(message: string, forceShow: boolean = false) {
+    if (isDev || forceShow) {
+      Logger.info('[SelectionService] Info: ', message)
+    }
   }
 
   private logError(...args: [...string[], Error]) {

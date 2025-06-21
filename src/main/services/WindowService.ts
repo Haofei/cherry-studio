@@ -56,7 +56,7 @@ export class WindowService {
       minHeight: 600,
       show: false,
       autoHideMenuBar: true,
-      transparent: isMac,
+      transparent: false,
       vibrancy: 'sidebar',
       visualEffectState: 'active',
       titleBarStyle: 'hidden',
@@ -115,12 +115,6 @@ export class WindowService {
         // 如果小于1分钟，则退出应用, 可能是连续crash，需要退出应用
         app.exit(1)
       }
-    })
-
-    mainWindow.webContents.on('unresponsive', () => {
-      // 在升级到electron 34后，可以获取具体js stack trace,目前只打个日志监控下
-      // https://www.electronjs.org/blog/electron-34-0#unresponsive-renderer-javascript-call-stacks
-      Logger.error('Renderer process unresponsive')
     })
   }
 
@@ -543,6 +537,25 @@ export class WindowService {
 
   public setPinMiniWindow(isPinned) {
     this.isPinnedMiniWindow = isPinned
+  }
+
+  /**
+   * 引用文本到主窗口
+   * @param text 原始文本（未格式化）
+   */
+  public quoteToMainWindow(text: string): void {
+    try {
+      this.showMainWindow()
+
+      const mainWindow = this.getMainWindow()
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        setTimeout(() => {
+          mainWindow.webContents.send(IpcChannel.App_QuoteToMain, text)
+        }, 100)
+      }
+    } catch (error) {
+      Logger.error('Failed to quote to main window:', error as Error)
+    }
   }
 }
 

@@ -1,5 +1,7 @@
+import { languages } from '@shared/config/languages'
 import remarkParse from 'remark-parse'
 import remarkStringify from 'remark-stringify'
+import removeMarkdown from 'remove-markdown'
 import { unified } from 'unified'
 import { visit } from 'unist-util-visit'
 
@@ -54,6 +56,40 @@ export function removeTrailingDoubleSpaces(markdown: string): string {
 }
 
 /**
+ * 根据语言名称获取文件扩展名
+ * - 先精确匹配，再忽略大小写，最后匹配别名
+ * - 返回第一个扩展名
+ * @param language 语言名称
+ * @returns 文件扩展名
+ */
+export function getExtensionByLanguage(language: string): string {
+  const lowerLanguage = language.toLowerCase()
+
+  // 精确匹配语言名称
+  const directMatch = languages[language]
+  if (directMatch?.extensions?.[0]) {
+    return directMatch.extensions[0]
+  }
+
+  // 大小写不敏感的语言名称匹配
+  for (const [langName, data] of Object.entries(languages)) {
+    if (langName.toLowerCase() === lowerLanguage && data.extensions?.[0]) {
+      return data.extensions[0]
+    }
+  }
+
+  // 通过别名匹配
+  for (const [, data] of Object.entries(languages)) {
+    if (data.aliases?.some((alias) => alias.toLowerCase() === lowerLanguage)) {
+      return data.extensions?.[0] || `.${language}`
+    }
+  }
+
+  // 回退到语言名称
+  return `.${language}`
+}
+
+/**
  * 根据代码块节点的起始位置生成 ID
  * @param start 代码块节点的起始位置
  * @returns 代码块在 Markdown 字符串中的 ID
@@ -99,4 +135,17 @@ export function isValidPlantUML(code: string | null): boolean {
   const diagramType = code.match(/@start(\w+)/)?.[1]
 
   return diagramType !== undefined && code.search(`@end${diagramType}`) !== -1
+}
+
+/**
+ * 将 Markdown 字符串转换为纯文本。
+ * @param markdown Markdown 字符串。
+ * @returns 纯文本字符串。
+ */
+export const markdownToPlainText = (markdown: string): string => {
+  if (!markdown) {
+    return ''
+  }
+  // 直接用 remove-markdown 库，使用默认的 removeMarkdown 参数
+  return removeMarkdown(markdown)
 }
