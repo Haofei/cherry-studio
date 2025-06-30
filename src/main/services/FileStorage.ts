@@ -15,9 +15,11 @@ import * as fs from 'fs'
 import { writeFileSync } from 'fs'
 import { readFile } from 'fs/promises'
 import officeParser from 'officeparser'
+import { getDocument } from 'officeparser/pdfjs-dist-build/pdf.js'
 import * as path from 'path'
 import { chdir } from 'process'
 import { v4 as uuidv4 } from 'uuid'
+import WordExtractor from 'word-extractor'
 
 class FileStorage {
   private storageDir = getFilesDir()
@@ -219,10 +221,20 @@ class FileStorage {
   public readFile = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<string> => {
     const filePath = path.join(this.storageDir, id)
 
-    if (documentExts.includes(path.extname(filePath))) {
+    const fileExtension = path.extname(filePath)
+
+    if (documentExts.includes(fileExtension)) {
       const originalCwd = process.cwd()
       try {
         chdir(this.tempDir)
+
+        if (fileExtension === '.doc') {
+          const extractor = new WordExtractor()
+          const extracted = await extractor.extract(filePath)
+          chdir(originalCwd)
+          return extracted.getBody()
+        }
+
         const data = await officeParser.parseOfficeAsync(filePath)
         chdir(originalCwd)
         return data
@@ -321,6 +333,16 @@ class FileStorage {
     return { data: base64, mime }
   }
 
+  public pdfPageCount = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<number> => {
+    const filePath = path.join(this.storageDir, id)
+    const buffer = await fs.promises.readFile(filePath)
+
+    const doc = await getDocument({ data: buffer }).promise
+    const pages = doc.numPages
+    await doc.destroy()
+    return pages
+  }
+
   public binaryImage = async (_: Electron.IpcMainInvokeEvent, id: string): Promise<{ data: Buffer; mime: string }> => {
     const filePath = path.join(this.storageDir, id)
     const data = await fs.promises.readFile(filePath)
@@ -341,7 +363,7 @@ class FileStorage {
   public open = async (
     _: Electron.IpcMainInvokeEvent,
     options: OpenDialogOptions
-  ): Promise<{ fileName: string; filePath: string; content: Buffer } | null> => {
+  ): Promise<{ fileName: string; filePath: string; content?: Buffer; size: number } | null> => {
     try {
       const result: OpenDialogReturnValue = await dialog.showOpenDialog({
         title: '打开文件',
@@ -353,8 +375,16 @@ class FileStorage {
       if (!result.canceled && result.filePaths.length > 0) {
         const filePath = result.filePaths[0]
         const fileName = filePath.split('/').pop() || ''
-        const content = await readFile(filePath)
-        return { fileName, filePath, content }
+        const stats = await fs.promises.stat(filePath)
+
+        // If the file is less than 2GB, read the content
+        if (stats.size < 2 * 1024 * 1024 * 1024) {
+          const content = await readFile(filePath)
+          return { fileName, filePath, content, size: stats.size }
+        }
+
+        // For large files, only return file information, do not read content
+        return { fileName, filePath, size: stats.size }
       }
 
       return null

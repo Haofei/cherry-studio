@@ -90,6 +90,7 @@ linux:
   artifactName: ${productName}-${version}-${arch}.${ext}
   target:
     - target: AppImage
+    - target: deb
   maintainer: electronjs.org
   category: Utility
   desktop:
@@ -107,8 +108,10 @@ afterSign: scripts/notarize.js
 artifactBuildCompleted: scripts/artifact-build-completed.js
 releaseInfo:
   releaseNotes: |
-    新增划词助手
-    助手支持分组
-    支持主题颜色切换
-    划词助手支持应用过滤
-    翻译模块功能改进
+    界面优化：优化多处界面样式，气泡样式改版，自动调整代码预览边栏宽度
+    知识库：修复知识库引用不显示问题，修复部分嵌入模型适配问题
+    备份与恢复：修复超过 2GB 大文件无法恢复问题
+    文件处理：添加 .doc 文件支持
+    划词助手：支持自定义 CSS 样式
+    MCP：基于 Pyodide 实现 Python MCP 服务
+    其他错误修复和优化

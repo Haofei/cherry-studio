@@ -8,11 +8,15 @@ import { isEmpty, uniqBy } from 'lodash'
 export interface AssistantsState {
   defaultAssistant: Assistant
   assistants: Assistant[]
+  tagsOrder: string[]
+  collapsedTags: Record<string, boolean>
 }
 
 const initialState: AssistantsState = {
   defaultAssistant: getDefaultAssistant(),
-  assistants: [getDefaultAssistant()]
+  assistants: [getDefaultAssistant()],
+  tagsOrder: [],
+  collapsedTags: {}
 }
 
 const assistantsSlice = createSlice({
@@ -48,13 +52,32 @@ const assistantsSlice = createSlice({
                 contextCount: DEFAULT_CONTEXTCOUNT,
                 enableMaxTokens: false,
                 maxTokens: 0,
-                streamOutput: true,
-                hideMessages: false
+                streamOutput: true
               }
             }
             assistant.settings[key] = settings[key]
           }
         }
+      }
+    },
+    setTagsOrder: (state, action: PayloadAction<string[]>) => {
+      const newOrder = action.payload
+      state.tagsOrder = newOrder
+      const prevCollapsed = state.collapsedTags || {}
+      const updatedCollapsed: Record<string, boolean> = { ...prevCollapsed }
+      newOrder.forEach((tag) => {
+        if (!(tag in updatedCollapsed)) {
+          updatedCollapsed[tag] = false
+        }
+      })
+      state.collapsedTags = updatedCollapsed
+    },
+    updateTagCollapse: (state, action: PayloadAction<string>) => {
+      const tag = action.payload
+      const prev = state.collapsedTags || {}
+      state.collapsedTags = {
+        ...prev,
+        [tag]: !prev[tag]
       }
     },
     addTopic: (state, action: PayloadAction<{ assistantId: string; topic: Topic }>) => {
@@ -145,7 +168,9 @@ export const {
   updateTopics,
   removeAllTopics,
   setModel,
-  updateAssistantSettings
+  setTagsOrder,
+  updateAssistantSettings,
+  updateTagCollapse
 } = assistantsSlice.actions
 
 export default assistantsSlice.reducer

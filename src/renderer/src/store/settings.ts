@@ -11,10 +11,11 @@ import {
   ThemeMode,
   TranslateLanguageVarious
 } from '@renderer/types'
+import { UpgradeChannel } from '@shared/config/constant'
 
 import { WebDAVSyncState } from './backup'
 
-export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter'
+export type SendMessageShortcut = 'Enter' | 'Shift+Enter' | 'Ctrl+Enter' | 'Command+Enter' | 'Alt+Enter'
 
 export type SidebarIcon = 'assistants' | 'agents' | 'paintings' | 'translate' | 'minapp' | 'knowledge' | 'files'
 
@@ -36,6 +37,19 @@ export type UserTheme = {
   colorPrimary: string
 }
 
+export interface S3Config {
+  endpoint: string
+  region: string
+  bucket: string
+  accessKeyId: string
+  secretAccessKey: string
+  root: string
+  autoSync: boolean
+  syncInterval: number
+  maxBackups: number
+  skipBackupFile: boolean
+}
+
 export interface SettingsState {
   showAssistants: boolean
   showTopics: boolean
@@ -47,6 +61,7 @@ export interface SettingsState {
   proxyUrl?: string
   userName: string
   showPrompt: boolean
+  showTokens: boolean
   showMessageDivider: boolean
   messageFont: 'system' | 'serif'
   showInputEstimatedTokens: boolean
@@ -66,6 +81,8 @@ export interface SettingsState {
   pasteLongTextThreshold: number
   clickAssistantToShowTopic: boolean
   autoCheckUpdate: boolean
+  testPlan: boolean
+  testChannel: UpgradeChannel
   renderInputMessageAsMarkdown: boolean
   // 代码执行
   codeExecution: {
@@ -128,14 +145,16 @@ export interface SettingsState {
   markdownExportPath: string | null
   forceDollarMathInMarkdown: boolean
   useTopicNamingForMessageTitle: boolean
+  showModelNameInMarkdown: boolean
+  showModelProviderInMarkdown: boolean
   thoughtAutoCollapse: boolean
-  notionAutoSplit: boolean
-  notionSplitSize: number
+  notionExportReasoning: boolean
   yuqueToken: string | null
   yuqueUrl: string | null
   yuqueRepoId: string | null
   joplinToken: string | null
   joplinUrl: string | null
+  joplinExportReasoning: boolean
   defaultObsidianVault: string | null
   defaultAgent: string | null
   // 思源笔记配置
@@ -151,6 +170,8 @@ export interface SettingsState {
   minappsOpenLinkExternal: boolean
   // 隐私设置
   enableDataCollection: boolean
+  enableSpellCheck: boolean
+  spellCheckLanguages: string[]
   enableQuickPanelTriggers: boolean
   enableBackspaceDeleteModel: boolean
   exportMenuOptions: {
@@ -163,6 +184,7 @@ export interface SettingsState {
     obsidian: boolean
     siyuan: boolean
     docx: boolean
+    plain_text: boolean
   }
   // OpenAI
   openAI: {
@@ -176,6 +198,7 @@ export interface SettingsState {
     knowledgeEmbed: boolean
   }
   defaultPaintingProvider: PaintingProvider
+  s3: S3Config
 }
 
 export type MultiModelMessageStyle = 'horizontal' | 'vertical' | 'fold' | 'grid'
@@ -191,6 +214,7 @@ export const initialState: SettingsState = {
   proxyUrl: undefined,
   userName: '',
   showPrompt: true,
+  showTokens: true,
   showMessageDivider: true,
   messageFont: 'system',
   showInputEstimatedTokens: false,
@@ -212,6 +236,8 @@ export const initialState: SettingsState = {
   pasteLongTextThreshold: 1500,
   clickAssistantToShowTopic: true,
   autoCheckUpdate: true,
+  testPlan: false,
+  testChannel: UpgradeChannel.LATEST,
   renderInputMessageAsMarkdown: false,
   codeExecution: {
     enabled: false,
@@ -269,14 +295,16 @@ export const initialState: SettingsState = {
   markdownExportPath: null,
   forceDollarMathInMarkdown: false,
   useTopicNamingForMessageTitle: false,
+  showModelNameInMarkdown: false,
+  showModelProviderInMarkdown: false,
   thoughtAutoCollapse: true,
-  notionAutoSplit: false,
-  notionSplitSize: 90,
+  notionExportReasoning: false,
   yuqueToken: '',
   yuqueUrl: '',
   yuqueRepoId: '',
   joplinToken: '',
   joplinUrl: '',
+  joplinExportReasoning: false,
   defaultObsidianVault: null,
   defaultAgent: null,
   siyuanApiUrl: null,
@@ -289,6 +317,8 @@ export const initialState: SettingsState = {
   showOpenedMinappsInSidebar: true,
   minappsOpenLinkExternal: false,
   enableDataCollection: false,
+  enableSpellCheck: false,
+  spellCheckLanguages: [],
   enableQuickPanelTriggers: false,
   enableBackspaceDeleteModel: true,
   exportMenuOptions: {
@@ -300,7 +330,8 @@ export const initialState: SettingsState = {
     joplin: true,
     obsidian: true,
     siyuan: true,
-    docx: true
+    docx: true,
+    plain_text: true
   },
   // OpenAI
   openAI: {
@@ -312,7 +343,19 @@ export const initialState: SettingsState = {
     backup: false,
     knowledgeEmbed: false
   },
-  defaultPaintingProvider: 'aihubmix'
+  defaultPaintingProvider: 'aihubmix',
+  s3: {
+    endpoint: '',
+    region: '',
+    bucket: '',
+    accessKeyId: '',
+    secretAccessKey: '',
+    root: '',
+    autoSync: false,
+    syncInterval: 0,
+    maxBackups: 0,
+    skipBackupFile: false
+  }
 }
 
 const settingsSlice = createSlice({
@@ -354,6 +397,9 @@ const settingsSlice = createSlice({
     },
     setShowPrompt: (state, action: PayloadAction<boolean>) => {
       state.showPrompt = action.payload
+    },
+    setShowTokens: (state, action: PayloadAction<boolean>) => {
+      state.showTokens = action.payload
     },
     setShowMessageDivider: (state, action: PayloadAction<boolean>) => {
       state.showMessageDivider = action.payload
@@ -408,6 +454,12 @@ const settingsSlice = createSlice({
     },
     setAutoCheckUpdate: (state, action: PayloadAction<boolean>) => {
       state.autoCheckUpdate = action.payload
+    },
+    setTestPlan: (state, action: PayloadAction<boolean>) => {
+      state.testPlan = action.payload
+    },
+    setTestChannel: (state, action: PayloadAction<UpgradeChannel>) => {
+      state.testChannel = action.payload
     },
     setRenderInputMessageAsMarkdown: (state, action: PayloadAction<boolean>) => {
       state.renderInputMessageAsMarkdown = action.payload
@@ -575,14 +627,17 @@ const settingsSlice = createSlice({
     setUseTopicNamingForMessageTitle: (state, action: PayloadAction<boolean>) => {
       state.useTopicNamingForMessageTitle = action.payload
     },
+    setShowModelNameInMarkdown: (state, action: PayloadAction<boolean>) => {
+      state.showModelNameInMarkdown = action.payload
+    },
+    setShowModelProviderInMarkdown: (state, action: PayloadAction<boolean>) => {
+      state.showModelProviderInMarkdown = action.payload
+    },
     setThoughtAutoCollapse: (state, action: PayloadAction<boolean>) => {
       state.thoughtAutoCollapse = action.payload
     },
-    setNotionAutoSplit: (state, action: PayloadAction<boolean>) => {
-      state.notionAutoSplit = action.payload
-    },
-    setNotionSplitSize: (state, action: PayloadAction<number>) => {
-      state.notionSplitSize = action.payload
+    setNotionExportReasoning: (state, action: PayloadAction<boolean>) => {
+      state.notionExportReasoning = action.payload
     },
     setYuqueToken: (state, action: PayloadAction<string>) => {
       state.yuqueToken = action.payload
@@ -598,6 +653,9 @@ const settingsSlice = createSlice({
     },
     setJoplinUrl: (state, action: PayloadAction<string>) => {
       state.joplinUrl = action.payload
+    },
+    setJoplinExportReasoning: (state, action: PayloadAction<boolean>) => {
+      state.joplinExportReasoning = action.payload
     },
     setMessageNavigation: (state, action: PayloadAction<'none' | 'buttons' | 'anchor'>) => {
       state.messageNavigation = action.payload
@@ -635,6 +693,12 @@ const settingsSlice = createSlice({
     setEnableDataCollection: (state, action: PayloadAction<boolean>) => {
       state.enableDataCollection = action.payload
     },
+    setEnableSpellCheck: (state, action: PayloadAction<boolean>) => {
+      state.enableSpellCheck = action.payload
+    },
+    setSpellCheckLanguages: (state, action: PayloadAction<string[]>) => {
+      state.spellCheckLanguages = action.payload
+    },
     setExportMenuOptions: (state, action: PayloadAction<typeof initialState.exportMenuOptions>) => {
       state.exportMenuOptions = action.payload
     },
@@ -655,11 +719,16 @@ const settingsSlice = createSlice({
     },
     setDefaultPaintingProvider: (state, action: PayloadAction<PaintingProvider>) => {
       state.defaultPaintingProvider = action.payload
+    },
+    setS3: (state, action: PayloadAction<S3Config>) => {
+      state.s3 = action.payload
     }
   }
 })
 
 export const {
+  setShowModelNameInMarkdown,
+  setShowModelProviderInMarkdown,
   setShowAssistants,
   toggleShowAssistants,
   setShowTopics,
@@ -672,6 +741,7 @@ export const {
   setProxyUrl,
   setUserName,
   setShowPrompt,
+  setShowTokens,
   setShowMessageDivider,
   setMessageFont,
   setShowInputEstimatedTokens,
@@ -689,6 +759,8 @@ export const {
   setAssistantIconType,
   setPasteLongTextAsFile,
   setAutoCheckUpdate,
+  setTestPlan,
+  setTestChannel,
   setRenderInputMessageAsMarkdown,
   setClickAssistantToShowTopic,
   setSkipBackupFile,
@@ -731,13 +803,13 @@ export const {
   setForceDollarMathInMarkdown,
   setUseTopicNamingForMessageTitle,
   setThoughtAutoCollapse,
-  setNotionAutoSplit,
-  setNotionSplitSize,
+  setNotionExportReasoning,
   setYuqueToken,
   setYuqueRepoId,
   setYuqueUrl,
   setJoplinToken,
   setJoplinUrl,
+  setJoplinExportReasoning,
   setMessageNavigation,
   setDefaultObsidianVault,
   setDefaultAgent,
@@ -750,13 +822,16 @@ export const {
   setShowOpenedMinappsInSidebar,
   setMinappsOpenLinkExternal,
   setEnableDataCollection,
-  setEnableQuickPanelTriggers,
+  setEnableSpellCheck,
+  setSpellCheckLanguages,
   setExportMenuOptions,
+  setEnableQuickPanelTriggers,
   setEnableBackspaceDeleteModel,
   setOpenAISummaryText,
   setOpenAIServiceTier,
   setNotificationSettings,
-  setDefaultPaintingProvider
+  setDefaultPaintingProvider,
+  setS3
 } = settingsSlice.actions
 
 export default settingsSlice.reducer

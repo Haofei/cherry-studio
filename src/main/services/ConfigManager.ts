@@ -1,4 +1,4 @@
-import { defaultLanguage, ZOOM_SHORTCUTS } from '@shared/config/constant'
+import { defaultLanguage, UpgradeChannel, ZOOM_SHORTCUTS } from '@shared/config/constant'
 import { LanguageVarious, Shortcut, ThemeMode } from '@types'
 import { app } from 'electron'
 import Store from 'electron-store'
@@ -16,6 +16,8 @@ export enum ConfigKeys {
   ClickTrayToShowQuickAssistant = 'clickTrayToShowQuickAssistant',
   EnableQuickAssistant = 'enableQuickAssistant',
   AutoUpdate = 'autoUpdate',
+  TestPlan = 'testPlan',
+  TestChannel = 'testChannel',
   EnableDataCollection = 'enableDataCollection',
   SelectionAssistantEnabled = 'selectionAssistantEnabled',
   SelectionAssistantTriggerMode = 'selectionAssistantTriggerMode',
@@ -141,6 +143,22 @@ export class ConfigManager {
     this.set(ConfigKeys.AutoUpdate, value)
   }
 
+  getTestPlan(): boolean {
+    return this.get<boolean>(ConfigKeys.TestPlan, false)
+  }
+
+  setTestPlan(value: boolean) {
+    this.set(ConfigKeys.TestPlan, value)
+  }
+
+  getTestChannel(): UpgradeChannel {
+    return this.get<UpgradeChannel>(ConfigKeys.TestChannel)
+  }
+
+  setTestChannel(value: UpgradeChannel) {
+    this.set(ConfigKeys.TestChannel, value)
+  }
+
   getEnableDataCollection(): boolean {
     return this.get<boolean>(ConfigKeys.EnableDataCollection, true)
   }
@@ -151,7 +169,7 @@ export class ConfigManager {
 
   // Selection Assistant: is enabled the selection assistant
   getSelectionAssistantEnabled(): boolean {
-    return this.get<boolean>(ConfigKeys.SelectionAssistantEnabled, true)
+    return this.get<boolean>(ConfigKeys.SelectionAssistantEnabled, false)
   }
 
   setSelectionAssistantEnabled(value: boolean) {

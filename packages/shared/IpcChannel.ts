@@ -3,6 +3,8 @@ export enum IpcChannel {
   App_ClearCache = 'app:clear-cache',
   App_SetLaunchOnBoot = 'app:set-launch-on-boot',
   App_SetLanguage = 'app:set-language',
+  App_SetEnableSpellCheck = 'app:set-enable-spell-check',
+  App_SetSpellCheckLanguages = 'app:set-spell-check-languages',
   App_ShowUpdateDialog = 'app:show-update-dialog',
   App_CheckForUpdate = 'app:check-for-update',
   App_Reload = 'app:reload',
@@ -13,17 +15,30 @@ export enum IpcChannel {
   App_SetTrayOnClose = 'app:set-tray-on-close',
   App_SetTheme = 'app:set-theme',
   App_SetAutoUpdate = 'app:set-auto-update',
+  App_SetTestPlan = 'app:set-test-plan',
+  App_SetTestChannel = 'app:set-test-channel',
   App_HandleZoomFactor = 'app:handle-zoom-factor',
-
+  App_Select = 'app:select',
+  App_HasWritePermission = 'app:has-write-permission',
+  App_Copy = 'app:copy',
+  App_SetStopQuitApp = 'app:set-stop-quit-app',
+  App_SetAppDataPath = 'app:set-app-data-path',
+  App_GetDataPathFromArgs = 'app:get-data-path-from-args',
+  App_FlushAppData = 'app:flush-app-data',
+  App_IsNotEmptyDir = 'app:is-not-empty-dir',
+  App_RelaunchApp = 'app:relaunch-app',
   App_IsBinaryExist = 'app:is-binary-exist',
   App_GetBinaryPath = 'app:get-binary-path',
   App_InstallUvBinary = 'app:install-uv-binary',
   App_InstallBunBinary = 'app:install-bun-binary',
 
+  App_QuoteToMain = 'app:quote-to-main',
+
   Notification_Send = 'notification:send',
   Notification_OnClick = 'notification:on-click',
 
   Webview_SetOpenLinkExternal = 'webview:set-open-link-external',
+  Webview_SetSpellCheckEnabled = 'webview:set-spell-check-enabled',
 
   // Open
   Open_Path = 'open:path',
@@ -56,6 +71,9 @@ export enum IpcChannel {
   Mcp_ServersUpdated = 'mcp:servers-updated',
   Mcp_CheckConnectivity = 'mcp:check-connectivity',
 
+  // Python
+  Python_Execute = 'python:execute',
+
   //copilot
   Copilot_GetAuthMessage = 'copilot:get-auth-message',
   Copilot_GetCopilotToken = 'copilot:get-copilot-token',
@@ -82,6 +100,10 @@ export enum IpcChannel {
   Gemini_RetrieveFile = 'gemini:retrieve-file',
   Gemini_ListFiles = 'gemini:list-files',
   Gemini_DeleteFile = 'gemini:delete-file',
+
+  // VertexAI
+  VertexAI_GetAuthHeaders = 'vertexai:get-auth-headers',
+  VertexAI_ClearAuthCache = 'vertexai:clear-auth-cache',
 
   Windows_ResetMinimumSize = 'window:reset-minimum-size',
   Windows_SetMinimumSize = 'window:set-minimum-size',
@@ -115,6 +137,7 @@ export enum IpcChannel {
   File_Copy = 'file:copy',
   File_BinaryImage = 'file:binaryImage',
   File_Base64File = 'file:base64File',
+  File_GetPdfInfo = 'file:getPdfInfo',
   Fs_Read = 'fs:read',
 
   Export_Word = 'export:word',
@@ -130,6 +153,11 @@ export enum IpcChannel {
   Backup_CheckConnection = 'backup:checkConnection',
   Backup_CreateDirectory = 'backup:createDirectory',
   Backup_DeleteWebdavFile = 'backup:deleteWebdavFile',
+  Backup_BackupToS3 = 'backup:backupToS3',
+  Backup_RestoreFromS3 = 'backup:restoreFromS3',
+  Backup_ListS3Files = 'backup:listS3Files',
+  Backup_DeleteS3File = 'backup:deleteS3File',
+  Backup_CheckS3Connection = 'backup:checkS3Connection',
 
   // zip
   Zip_Compress = 'zip:compress',

@@ -56,7 +56,7 @@ export class WindowService {
       minHeight: 600,
       show: false,
       autoHideMenuBar: true,
-      transparent: isMac,
+      transparent: false,
       vibrancy: 'sidebar',
       visualEffectState: 'active',
       titleBarStyle: 'hidden',
@@ -95,11 +95,24 @@ export class WindowService {
 
     this.setupMaximize(mainWindow, mainWindowState.isMaximized)
     this.setupContextMenu(mainWindow)
+    this.setupSpellCheck(mainWindow)
     this.setupWindowEvents(mainWindow)
     this.setupWebContentsHandlers(mainWindow)
     this.setupWindowLifecycleEvents(mainWindow)
     this.setupMainWindowMonitor(mainWindow)
     this.loadMainWindowContent(mainWindow)
+  }
+
+  private setupSpellCheck(mainWindow: BrowserWindow) {
+    const enableSpellCheck = configManager.get('enableSpellCheck', false)
+    if (enableSpellCheck) {
+      try {
+        const spellCheckLanguages = configManager.get('spellCheckLanguages', []) as string[]
+        spellCheckLanguages.length > 0 && mainWindow.webContents.session.setSpellCheckerLanguages(spellCheckLanguages)
+      } catch (error) {
+        Logger.error('Failed to set spell check languages:', error as Error)
+      }
+    }
   }
 
   private setupMainWindowMonitor(mainWindow: BrowserWindow) {
@@ -116,12 +129,6 @@ export class WindowService {
         app.exit(1)
       }
     })
-
-    mainWindow.webContents.on('unresponsive', () => {
-      // 在升级到electron 34后，可以获取具体js stack trace,目前只打个日志监控下
-      // https://www.electronjs.org/blog/electron-34-0#unresponsive-renderer-javascript-call-stacks
-      Logger.error('Renderer process unresponsive')
-    })
   }
 
   private setupMaximize(mainWindow: BrowserWindow, isMaximized: boolean) {
@@ -136,9 +143,10 @@ export class WindowService {
   }
 
   private setupContextMenu(mainWindow: BrowserWindow) {
-    contextMenu.contextMenu(mainWindow)
-    app.on('browser-window-created', (_, win) => {
-      contextMenu.contextMenu(win)
+    contextMenu.contextMenu(mainWindow.webContents)
+    // setup context menu for all webviews like miniapp
+    app.on('web-contents-created', (_, webContents) => {
+      contextMenu.contextMenu(webContents)
     })
 
     // Dangerous API
@@ -543,6 +551,25 @@ export class WindowService {
 
   public setPinMiniWindow(isPinned) {
     this.isPinnedMiniWindow = isPinned
+  }
+
+  /**
+   * 引用文本到主窗口
+   * @param text 原始文本（未格式化）
+   */
+  public quoteToMainWindow(text: string): void {
+    try {
+      this.showMainWindow()
+
+      const mainWindow = this.getMainWindow()
+      if (mainWindow && !mainWindow.isDestroyed()) {
+        setTimeout(() => {
+          mainWindow.webContents.send(IpcChannel.App_QuoteToMain, text)
+        }, 100)
+      }
+    } catch (error) {
+      Logger.error('Failed to quote to main window:', error as Error)
+    }
   }
 }
 
